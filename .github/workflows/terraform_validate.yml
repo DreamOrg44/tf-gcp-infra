@@ -4,7 +4,7 @@ on:
   pull_request:
     branches:
       - main
-
+#Running jobs
 jobs:
   validate-terraform:
     runs-on: ubuntu-latest
