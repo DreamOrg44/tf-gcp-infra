@@ -20,7 +20,7 @@ Gcloud console-> Apis and services-> library-> compute engine, IAM enable.
 
 #set up .tf file for all theinfra resources and once done run the below commands to verify if correct infra is getting created.
 Add content to main.tf file like region,project name and subnet vpc details
-#tf commands
+#tf commands for setting up the infra
 terraform init
 terraform plan
 terraform validate
