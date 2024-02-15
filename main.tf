@@ -9,6 +9,7 @@ resource "google_compute_network" "my_vpc" {
   name                    = "my-vpc"
   auto_create_subnetworks = false
   routing_mode            = "REGIONAL"
+ #delete_default_routes_on_create = true
 }
 
 # Create Subnets
