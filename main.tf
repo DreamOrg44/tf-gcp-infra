@@ -37,11 +37,11 @@ resource "google_compute_route" "subnet_route" {
 }
 # Create Firewall Rule
 resource "google_compute_firewall" "firewall" {
-  name    = "var.firewall_name"
+  name    = var.firewall_name
   network = google_compute_network.mainvpc.name
 
   allow {
-    protocol = "var.firewall_protocol"
+    protocol = var.firewall_protocol
     ports    = [var.application_port]
   }
 
@@ -51,7 +51,7 @@ resource "google_compute_firewall" "firewall" {
 
 # Create Compute Engine Instance
 resource "google_compute_instance" "webapp_instance" {
-  name         = "var.compute_instance"
+  name         = var.compute_instance
   machine_type = "n1-standard-1"  # Change as needed
 
   boot_disk {
