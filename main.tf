@@ -54,6 +54,7 @@ resource "google_compute_instance" "webapp_instance" {
   name         = var.compute_instance
   machine_type = "n1-standard-1"
   zone= var.zone
+
   boot_disk {
     initialize_params {
       image = var.custom_image
