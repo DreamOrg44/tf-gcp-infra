@@ -52,8 +52,9 @@ resource "google_compute_firewall" "firewall" {
 # Create Compute Engine Instance
 resource "google_compute_instance" "webapp_instance" {
   name         = var.compute_instance
-  machine_type = "n1-standard-1"
+  machine_type = "e2-standard-2"
   zone= var.zone
+  depends_on=[google_compute_network.vpc_network]
 
   boot_disk {
     initialize_params {
