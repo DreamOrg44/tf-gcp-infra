@@ -1,4 +1,4 @@
-provider "google" {
+provider "google"{ 
   #credentials = file("<path-to-your-service-account-key.json>")
   project     = var.project_id
   region      = var.region
@@ -54,7 +54,7 @@ resource "google_compute_instance" "webapp_instance" {
   name         = var.compute_instance
   machine_type = "e2-standard-2"
   zone= var.zone
-  depends_on=[google_compute_network.vpc_network]
+  depends_on=[google_compute_network.mainvpc]
 
   boot_disk {
     initialize_params {
