@@ -92,3 +92,8 @@ variable "compute_instance" {
   description = "The compute engine instanc asked to be created"
   type        = string
 }
+
+variable "zone" {
+  description = "The compute engine instanc asked to be created"
+  type        = string
+}
