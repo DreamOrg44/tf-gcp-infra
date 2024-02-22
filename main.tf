@@ -9,7 +9,7 @@ resource "google_compute_network" "mainvpc" {
   name                    = var.vpc_name
   auto_create_subnetworks = var.auto_create_subnetworks
   routing_mode            = var.routing_mode
- #delete_default_routes_on_create = true
+ delete_default_routes_on_create = true
 }
 
 # Create Subnets
@@ -35,4 +35,40 @@ resource "google_compute_route" "subnet_route" {
   next_hop_gateway = var.next_hop_gateway
 
 }
+# Create Firewall Rule
+resource "google_compute_firewall" "firewall" {
+  name    = "var.firewall_name"
+  network = google_compute_network.mainvpc.name
 
+  allow {
+    protocol = "var.firewall_protocol"
+    ports    = [var.application_port]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["webapp"]
+}
+
+# Create Compute Engine Instance
+resource "google_compute_instance" "webapp_instance" {
+  name         = "var.compute_instance"
+  machine_type = "n1-standard-1"  # Change as needed
+
+  boot_disk {
+    initialize_params {
+      image = var.custom_image
+      size  = 100
+      type  = "pd-balanced"
+    }
+  }
+
+  network_interface {
+    subnetwork = google_compute_subnetwork.subnet_1.self_link
+    network_ip = google_compute_subnetwork.subnet_1.ip_cidr_range
+	access_config {
+      	// No specific configuration for now
+    	}
+  }
+
+  tags = ["webapp"]
+}
