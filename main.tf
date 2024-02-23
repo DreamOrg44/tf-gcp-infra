@@ -66,7 +66,6 @@ resource "google_compute_instance" "webapp_instance" {
 
   network_interface {
     subnetwork = google_compute_subnetwork.subnet_1.self_link
-    network_ip = google_compute_subnetwork.subnet_1.ip_cidr_range
 	access_config {
       	// No specific configuration for now
     	}
