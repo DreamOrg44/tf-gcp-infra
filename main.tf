@@ -42,7 +42,7 @@ resource "google_compute_firewall" "firewall" {
 
   allow {
     protocol = var.firewall_protocol
-    ports    = [var.application_port, "22"]
+    ports    = [var.application_port]
   }
 
   source_ranges = ["0.0.0.0/0"]
