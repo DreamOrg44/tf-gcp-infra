@@ -97,3 +97,49 @@ variable "zone" {
   description = "The compute engine instanc asked to be created"
   type        = string
 }
+
+variable "sql_instance_name" {
+  description = "Name of the CloudSQL instance"
+  type        = string
+}
+
+variable "sql_database_version" {
+  description = "Database version for CloudSQL instance"
+  type        = string
+}
+
+variable "sql_deletion_protection" {
+  description = "Specifies whether deletion protection is enabled for the Cloud SQL instance."
+  type        = string
+}
+
+variable "sql_availability_type" { 
+  description = "Sets the availability type for the Cloud SQL instance (e.g., regional)."
+  type        = string
+}
+
+variable "sql_disk_type" {
+  description = "Defines the disk type for the Cloud SQL instance "
+  type        = string
+}
+
+variable "sql_disk_size" { 
+  description = "Specifies the size of the disk for the Cloud SQL instance"
+  type        = string
+}
+
+variable "sql_ipv4_enabled" {
+  description = "Indicates whether IPv4 is enabled for the Cloud SQL instance."
+  type        = string
+}
+
+variable "sql_private_network" { 
+  description = "Specifies the custom VPC for the Cloud SQL instance."
+  type        = string
+}
+
+variable "sql_tier" {
+  description = "Machine tier for Cloud SQL instance."
+  type= string
+}
+

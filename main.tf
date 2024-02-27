@@ -9,7 +9,7 @@ resource "google_compute_network" "mainvpc" {
   name                    = var.vpc_name
   auto_create_subnetworks = var.auto_create_subnetworks
   routing_mode            = var.routing_mode
- delete_default_routes_on_create = true
+  delete_default_routes_on_create = true
 }
 
 # Create Subnets
@@ -18,6 +18,7 @@ resource "google_compute_subnetwork" "subnet_1" {
   ip_cidr_range = var.subnetwork_ip_cidr_range_1
   region        = var.region
   network       = google_compute_network.mainvpc.name
+  private_ip_google_access = true
 }
 
 resource "google_compute_subnetwork" "subnet_2" {
@@ -25,6 +26,7 @@ resource "google_compute_subnetwork" "subnet_2" {
   ip_cidr_range = var.subnetwork_ip_cidr_range_2
   region 	= var.region
   network       = google_compute_network.mainvpc.name
+  private_ip_google_access = true
 }
 
 # Add Route for webapp subnet
@@ -49,6 +51,13 @@ resource "google_compute_firewall" "firewall" {
   target_tags   = ["webapp"]
 }
 
+#Create Google Compute Address For Compute Instance Access
+# resource "google_compute_address" "internal_ip" {
+#   name   = "internal-ip"
+#   region = var.region
+# }
+
+
 # Create Compute Engine Instance
 resource "google_compute_instance" "webapp_instance" {
   name         = var.compute_instance
@@ -67,9 +76,76 @@ resource "google_compute_instance" "webapp_instance" {
   network_interface {
     subnetwork = google_compute_subnetwork.subnet_1.self_link
 	access_config {
-      	// No specific configuration for now
+      	# nat_ip = google_compute_address.internal_ip.address
     	}
   }
 
   tags = ["webapp"]
 }
+
+#Create Compute Address for private service connection
+resource "google_compute_global_address" "compute_address" {
+  name          = "custom-compute-address"
+  purpose       = "VPC_PEERING"
+  address_type  = "INTERNAL"
+  prefix_length = 24
+  network       = google_compute_network.mainvpc.self_link
+  #address      = "10.3.0.5"
+}
+
+
+
+#Adding to test for private service connection while terraform apply
+resource "google_service_networking_connection" "vpc_connection_private" {
+  network                 = google_compute_network.mainvpc.self_link
+  service                 = "servicenetworking.googleapis.com"
+  depends_on              = [google_compute_global_address.compute_address]
+  reserved_peering_ranges = [google_compute_global_address.compute_address.name]
+}
+
+
+#Create Google SQL Database Instance
+resource "google_sql_database_instance" "cloudsql_instance" {
+  name             = var.sql_instance_name
+  database_version = var.sql_database_version
+  # project          = var.project_id
+  # region           = var.region
+  deletion_protection = var.sql_deletion_protection
+  settings {
+    tier                         = var.sql_tier
+    availability_type            = var.sql_availability_type
+    disk_type                    = var.sql_disk_type
+    disk_size                    = var.sql_disk_size
+  ip_configuration{
+    ipv4_enabled                 = var.sql_ipv4_enabled
+    private_network              = google_compute_network.mainvpc.self_link
+    enable_private_path_for_google_cloud_services= true
+  }
+  }
+}
+
+#Creating Cloud SQL Database
+resource "google_sql_database" "webapp_database" {
+  name     = "webapp"
+  instance = google_sql_database_instance.cloudsql_instance.name
+}
+
+#Generating random password as stated in the assignment
+resource "random_password" "webapp_user_password" {
+  length           = 16
+  special          = true
+  upper            = true
+  lower            = true
+  numeric           = true
+}
+
+#Create Cloud SQL User
+resource "google_sql_user" "webapp_user" {
+  name     = "webapp"
+  instance = google_sql_database_instance.cloudsql_instance.name
+  password = random_password.webapp_user_password.result
+}
+
+
+
+
