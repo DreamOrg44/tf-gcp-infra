@@ -142,4 +142,7 @@ variable "sql_tier" {
   description = "Machine tier for Cloud SQL instance."
   type= string
 }
-
+variable "dns_name" {
+  description = "Name of the dns server."
+  type= string
+}

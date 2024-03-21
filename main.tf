@@ -86,6 +86,10 @@ resource "google_compute_instance" "webapp_instance" {
     db_host     = google_sql_database_instance.cloudsql_instance.private_ip_address
   }
   metadata_startup_script = file("startup-script.sh")
+  service_account {
+    email  = google_service_account.log_account.email
+    scopes = ["cloud-platform"]
+  }
   tags = ["webapp"]
 }
 
@@ -152,6 +156,42 @@ resource "google_sql_user" "webapp_user" {
   password = random_password.webapp_user_password.result
 }
 
+#data "google_dns_managed_zone" "cloud_dns_zone" {
+ #name        = "rushikesh-deore-namecheap"
+  #dns_name    = var.dns_name
+  #description = "DNS zone for tld mapping .me"
+  # project     = var.project_id
+#}
 
+resource "google_dns_record_set" "record_a" {
+  name    = var.dns_name
+  type    = "A"
+  ttl     = 300
+  #managed_zone = google_dns_managed_zone.cloud_dns_zone.name
+  managed_zone="rushikesh-deore-namecheap"
+  rrdatas = [
+    google_compute_instance.webapp_instance.network_interface[0].access_config[0].nat_ip
+  ]
+}
+resource "google_service_account" "log_account" {
+  account_id   = "log-account"
+  display_name = "Logging_Account"
+}
 
+resource "google_project_iam_binding" "writer_config_monitor" {
+  project = var.project_id
+  role    = "roles/logging.configWriter"
 
+  members = [
+    "serviceAccount:log-account@${var.project_id}.iam.gserviceaccount.com",
+  ]
+}
+
+resource "google_project_iam_binding" "writer_metric_monitor" {
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+
+  members = [
+    "serviceAccount:log-account@${var.project_id}.iam.gserviceaccount.com",
+  ]
+}
