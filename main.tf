@@ -63,7 +63,7 @@ resource "google_compute_instance" "webapp_instance" {
   name         = var.compute_instance
   machine_type = "e2-standard-2"
   zone= var.zone
-  depends_on=[google_compute_network.mainvpc]
+  depends_on=[google_compute_network.mainvpc, google_service_account.log_account]
 
   boot_disk {
     initialize_params {
@@ -180,7 +180,7 @@ resource "google_service_account" "log_account" {
 
 resource "google_project_iam_binding" "writer_config_monitor" {
   project = var.project_id
-  role    = "roles/logging.configWriter"
+  role    = "roles/logging.admin"
 
   members = [
     "serviceAccount:log-account@${var.project_id}.iam.gserviceaccount.com",
@@ -194,4 +194,82 @@ resource "google_project_iam_binding" "writer_metric_monitor" {
   members = [
     "serviceAccount:log-account@${var.project_id}.iam.gserviceaccount.com",
   ]
+}
+# resource "google_project_iam_binding" "publisher_pubsub" {
+#   project = var.project_id
+#   role    = "roles/pubsub.publisher"
+
+#   members = [
+#     "serviceAccount:${google_service_account.log_account.email}",
+#   ]
+# }
+
+resource "random_id" "bucket_prefix" {
+  byte_length = 8
+}
+
+resource "google_storage_bucket" "verify_email_bucket" {
+  name                        = "${random_id.bucket_prefix.hex}-verify-email-gcf-source" # Every bucket name must be globally unique
+  location                    = "US"
+  uniform_bucket_level_access = true
+}
+
+data "archive_file" "source_code" {
+  type        = "zip"
+  output_path = "/tmp/serverless.zip"
+  source_dir  = "serverless/"
+}
+
+resource "google_storage_bucket_object" "code" {
+  name   = "function-source.zip"
+  bucket = google_storage_bucket.verify_email_bucket.name
+  source = data.archive_file.source_code.output_path
+}
+
+resource "google_cloudfunctions2_function" "verify_email" {
+  name        = "verify-email"
+  location    = "us-east1"
+  description = "Automated email verification service upon user creation"
+  build_config {
+    entry_point = "verifyEmail"
+    runtime     = "nodejs20"
+    environment_variables = {
+      BUILD_CONFIG_TEST = "build_test"
+      # SENDGRID_API_KEY = var.sendgrid_api_key
+      # EMAIL_FROM       = var.email_from
+    }
+    source {
+      storage_source {
+        bucket = google_storage_bucket.verify_email_bucket.name
+        object = google_storage_bucket_object.code.name
+      }
+    }
+  }
+  service_config {
+    max_instance_count = 1
+    min_instance_count = 1
+    available_memory   = "256M"
+    timeout_seconds    = 60
+    environment_variables = {
+      SERVICE_CONFIG_TEST = "config_test"
+    }
+    ingress_settings               = "ALLOW_INTERNAL_ONLY"
+    all_traffic_on_latest_revision = true
+    service_account_email          = google_service_account.gcf_sa.email
+  }
+  event_trigger {
+    trigger_region = "us-east1"
+    event_type     = "google.cloud.pubsub.topic.v1.messagePublished"
+    pubsub_topic   = google_pubsub_topic.verify_email.id
+    retry_policy   = "RETRY_POLICY_RETRY"
+  }
+}
+resource "google_pubsub_topic" "verify_email" {
+  name                       = "verify_email"
+  message_retention_duration = "604800s"
+}
+
+resource "google_service_account" "gcf_sa" {
+  account_id   = "gcf-sa"
+  display_name = "GFC Service Account"
 }
