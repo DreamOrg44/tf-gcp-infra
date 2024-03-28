@@ -209,7 +209,7 @@ resource "random_id" "bucket_prefix" {
 }
 
 resource "google_storage_bucket" "verify_email_bucket" {
-  name                        = "${random_id.bucket_prefix.hex}-verify-email-gcf-source" # Every bucket name must be globally unique
+  name                        = "${random_id.bucket_prefix.hex}-verify_email_bucket" # Every bucket name must be globally unique
   location                    = "US"
   uniform_bucket_level_access = true
 }
@@ -221,7 +221,7 @@ data "archive_file" "source_code" {
 }
 
 resource "google_storage_bucket_object" "code" {
-  name   = "function-source.zip"
+  name   = "serverless.zip"
   bucket = google_storage_bucket.verify_email_bucket.name
   source = data.archive_file.source_code.output_path
 }
@@ -232,11 +232,9 @@ resource "google_cloudfunctions2_function" "verify_email" {
   description = "Automated email verification service upon user creation"
   build_config {
     entry_point = "verifyEmail"
-    runtime     = "nodejs20"
+    runtime     = "nodejs18"
     environment_variables = {
       BUILD_CONFIG_TEST = "build_test"
-      # SENDGRID_API_KEY = var.sendgrid_api_key
-      # EMAIL_FROM       = var.email_from
     }
     source {
       storage_source {
@@ -250,9 +248,9 @@ resource "google_cloudfunctions2_function" "verify_email" {
     min_instance_count = 1
     available_memory   = "256M"
     timeout_seconds    = 60
-    environment_variables = {
-      SERVICE_CONFIG_TEST = "config_test"
-    }
+    # environment_variables = {
+    #   SERVICE_CONFIG_TEST = "config_test"
+    # }
     ingress_settings               = "ALLOW_INTERNAL_ONLY"
     all_traffic_on_latest_revision = true
     service_account_email          = google_service_account.gcf_sa.email
@@ -271,5 +269,5 @@ resource "google_pubsub_topic" "verify_email" {
 
 resource "google_service_account" "gcf_sa" {
   account_id   = "gcf-sa"
-  display_name = "GFC Service Account"
+  display_name = "GCF Service Account"
 }
