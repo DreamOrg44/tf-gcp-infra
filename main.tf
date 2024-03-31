@@ -195,14 +195,17 @@ resource "google_project_iam_binding" "writer_metric_monitor" {
     "serviceAccount:log-account@${var.project_id}.iam.gserviceaccount.com",
   ]
 }
-# resource "google_project_iam_binding" "publisher_pubsub" {
-#   project = var.project_id
-#   role    = "roles/pubsub.publisher"
+resource "google_pubsub_topic_iam_binding" "publisher" {
+  topic =google_pubsub_topic.verify_email.id
+  # project = var.project_id
+  role   = "roles/pubsub.publisher"
 
-#   members = [
-#     "serviceAccount:${google_service_account.log_account.email}",
-#   ]
-# }
+  members = [
+    # "serviceAccount:${google_service_account.gcf_sa.email}",
+    # "serviceAccount:gcf-sa@${var.project_id}.iam.gserviceaccount.com",
+    "serviceAccount:${google_service_account.log_account.email}",
+  ]
+}
 
 resource "random_id" "bucket_prefix" {
   byte_length = 8
