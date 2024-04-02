@@ -146,3 +146,23 @@ variable "dns_name" {
   description = "Name of the dns server."
   type= string
 }
+variable "cloudsql_database_dialect" {
+  description="database dialect"
+  type=string
+}
+variable "mailgun_api_key"{
+  description="api key for mailgun"
+  type=string
+}
+variable "mailgun_domain" {
+  description="domain for mailgun"
+  type=string
+}
+variable "gcf_connector_name" {
+  description="gcf connector"
+  type=string
+}
+variable "gcf_connector_ip_cidr_range" {
+  description="gcf connector ip range"
+  type=string
+}

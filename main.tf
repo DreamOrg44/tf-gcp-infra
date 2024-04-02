@@ -229,6 +229,13 @@ resource "google_storage_bucket_object" "code" {
   source = data.archive_file.source_code.output_path
 }
 
+resource "google_vpc_access_connector" "gcf_connector" {
+name= var.gcf_connector_name
+region= var.region
+network=google_compute_network.mainvpc.self_link
+ip_cidr_range = var.gcf_connector_ip_cidr_range
+}
+
 resource "google_cloudfunctions2_function" "verify_email" {
   name        = "verify-email"
   location    = "us-east1"
@@ -251,9 +258,16 @@ resource "google_cloudfunctions2_function" "verify_email" {
     min_instance_count = 1
     available_memory   = "256M"
     timeout_seconds    = 60
-    # environment_variables = {
-    #   SERVICE_CONFIG_TEST = "config_test"
-    # }
+    vpc_connector=google_vpc_access_connector.gcf_connector.self_link
+    environment_variables = {
+      DB_HOST=google_sql_database_instance.cloudsql_instance.private_ip_address
+      DB_NAME=google_sql_database.webapp_database.name
+      DB_DIALECT=var.cloudsql_database_dialect
+      DB_USER=google_sql_user.webapp_user.name
+      DB_PASSWORD=random_password.webapp_user_password.result
+      MAILGUN_API_KEY=var.mailgun_api_key
+      MAILGUN_DOMAIN=var.mailgun_domain
+    }
     ingress_settings               = "ALLOW_INTERNAL_ONLY"
     all_traffic_on_latest_revision = true
     service_account_email          = google_service_account.gcf_sa.email
@@ -264,6 +278,7 @@ resource "google_cloudfunctions2_function" "verify_email" {
     pubsub_topic   = google_pubsub_topic.verify_email.id
     retry_policy   = "RETRY_POLICY_RETRY"
   }
+  depends_on = [ google_storage_bucket_object.code, google_vpc_access_connector.gcf_connector, google_pubsub_topic.verify_email ]
 }
 resource "google_pubsub_topic" "verify_email" {
   name                       = "verify_email"
