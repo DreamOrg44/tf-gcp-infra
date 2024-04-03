@@ -1,42 +1,53 @@
-provider "google"{ 
+provider "google" {
   #credentials = file("<path-to-your-service-account-key.json>")
-  project     = var.project_id
-  region      = var.region
+  project = var.project_id
+  region  = var.region
 }
 
 # Create VPC
 resource "google_compute_network" "mainvpc" {
-  name                    = var.vpc_name
-  auto_create_subnetworks = var.auto_create_subnetworks
-  routing_mode            = var.routing_mode
+  name                            = var.vpc_name
+  auto_create_subnetworks         = var.auto_create_subnetworks
+  routing_mode                    = var.routing_mode
   delete_default_routes_on_create = true
 }
 
 # Create Subnets
 resource "google_compute_subnetwork" "subnet_1" {
-  name          = var.subnetwork_name_1
-  ip_cidr_range = var.subnetwork_ip_cidr_range_1
-  region        = var.region
-  network       = google_compute_network.mainvpc.name
+  name                     = var.subnetwork_name_1
+  ip_cidr_range            = var.subnetwork_ip_cidr_range_1
+  region                   = var.region
+  network                  = google_compute_network.mainvpc.name
   private_ip_google_access = true
 }
 
 resource "google_compute_subnetwork" "subnet_2" {
-  name          = var.subnetwork_name_2
-  ip_cidr_range = var.subnetwork_ip_cidr_range_2
-  region 	= var.region
-  network       = google_compute_network.mainvpc.name
+  name                     = var.subnetwork_name_2
+  ip_cidr_range            = var.subnetwork_ip_cidr_range_2
+  region                   = var.region
+  network                  = google_compute_network.mainvpc.name
   private_ip_google_access = true
 }
 
 # Add Route for webapp subnet
 resource "google_compute_route" "subnet_route" {
-  name         = var.route_name
-  network      = google_compute_network.mainvpc.self_link
-  dest_range   = var.dest_range
+  name             = var.route_name
+  network          = google_compute_network.mainvpc.self_link
+  dest_range       = var.dest_range
   next_hop_gateway = var.next_hop_gateway
 
 }
+resource "google_service_account" "instance_template_account" {
+  account_id   = "instance-template-account"
+  display_name = "VM Instance Template Service Account"
+}
+
+resource "google_project_iam_member" "vm_instance_member" {
+  project = var.project_id
+  role    = "roles/compute.instanceAdmin.v1"
+  member  = "serviceAccount:${google_service_account.instance_template_account.email}"
+}
+
 # Create Firewall Rule
 resource "google_compute_firewall" "firewall" {
   name    = var.firewall_name
@@ -46,10 +57,13 @@ resource "google_compute_firewall" "firewall" {
     protocol = var.firewall_protocol
     ports    = [var.application_port]
   }
-
-  source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["webapp"]
+  #changes here
+  #source_ranges = ["0.0.0.0/0"]
+  source_service_accounts = [google_service_account.instance_template_account.email] # Specify the service account email(s) you want to allow
+  # target_tags             = ["webapp"]
 }
+#Never Delete
+#changes here
 
 #Create Google Compute Address For Compute Instance Access
 # resource "google_compute_address" "internal_ip" {
@@ -59,39 +73,82 @@ resource "google_compute_firewall" "firewall" {
 
 
 # Create Compute Engine Instance
-resource "google_compute_instance" "webapp_instance" {
-  name         = var.compute_instance
-  machine_type = "e2-standard-2"
-  zone= var.zone
-  depends_on=[google_compute_network.mainvpc, google_service_account.log_account]
+# resource "google_compute_instance" "webapp_instance" {
+#   name         = var.compute_instance
+#   machine_type = "e2-standard-2"
+#   zone= var.zone
+#   depends_on=[google_compute_network.mainvpc, google_service_account.log_account]
 
-  boot_disk {
-    initialize_params {
-      image = var.custom_image
-      size  = 100
-      type  = "pd-balanced"
-    }
+#   boot_disk {
+#     initialize_params {
+#       image = var.custom_image
+#       size  = 100
+#       type  = "pd-balanced"
+#     }
+#   }
+
+#   network_interface {
+#     subnetwork = google_compute_subnetwork.subnet_1.self_link
+# 	access_config {
+#       	# nat_ip = google_compute_address.internal_ip.address
+#     	}
+#   }
+#    metadata = {
+#     db_name     = google_sql_database.webapp_database.name
+#     db_user     = google_sql_user.webapp_user.name
+#     db_password = random_password.webapp_user_password.result
+#     db_host     = google_sql_database_instance.cloudsql_instance.private_ip_address
+#   }
+#   metadata_startup_script = file("startup-script.sh")
+#   service_account {
+#     email  = google_service_account.log_account.email
+#     scopes = ["cloud-platform"]
+#   }
+#   tags = ["webapp"]
+# }
+#changes here
+resource "google_compute_region_instance_template" "webapp_instance_template" {
+  name_prefix  = var.compute_instance_template
+  machine_type = "e2-standard-2"
+  region       = var.region
+
+  disk {
+    source_image = var.custom_image
+    disk_size_gb = 100
+    type         = "pd-balanced"
+    boot         = true
   }
 
   network_interface {
+    network    = google_compute_network.mainvpc.self_link
     subnetwork = google_compute_subnetwork.subnet_1.self_link
-	access_config {
-      	# nat_ip = google_compute_address.internal_ip.address
-    	}
+    access_config {
+      network_tier = "STANDARD"
+    }
   }
-   metadata = {
-    db_name     = google_sql_database.webapp_database.name
-    db_user     = google_sql_user.webapp_user.name
-    db_password = random_password.webapp_user_password.result
-    db_host     = google_sql_database_instance.cloudsql_instance.private_ip_address
-  }
-  metadata_startup_script = file("startup-script.sh")
+
+  # metadata = {
+  #   db_name     = google_sql_database.webapp_database.name
+  #   db_user     = google_sql_user.webapp_user.name
+  #   db_password = random_password.webapp_user_password.result
+  #   db_host     = google_sql_database_instance.cloudsql_instance.private_ip_address
+  # }
+
+  # metadata_startup_script = file("startup-script.sh")
+
   service_account {
-    email  = google_service_account.log_account.email
+    email  = google_service_account.instance_template_account.email
     scopes = ["cloud-platform"]
   }
+  lifecycle {
+    create_before_destroy = true
+  }
+
   tags = ["webapp"]
 }
+
+
+
 
 #Create Compute Address for private service connection
 resource "google_compute_global_address" "compute_address" {
@@ -122,15 +179,15 @@ resource "google_sql_database_instance" "cloudsql_instance" {
   # region           = var.region
   deletion_protection = var.sql_deletion_protection
   settings {
-    tier                         = var.sql_tier
-    availability_type            = var.sql_availability_type
-    disk_type                    = var.sql_disk_type
-    disk_size                    = var.sql_disk_size
-  ip_configuration{
-    ipv4_enabled                 = var.sql_ipv4_enabled
-    private_network              = google_compute_network.mainvpc.self_link
-    enable_private_path_for_google_cloud_services= true
-  }
+    tier              = var.sql_tier
+    availability_type = var.sql_availability_type
+    disk_type         = var.sql_disk_type
+    disk_size         = var.sql_disk_size
+    ip_configuration {
+      ipv4_enabled                                  = var.sql_ipv4_enabled
+      private_network                               = google_compute_network.mainvpc.self_link
+      enable_private_path_for_google_cloud_services = true
+    }
   }
 }
 
@@ -142,11 +199,11 @@ resource "google_sql_database" "webapp_database" {
 
 #Generating random password as stated in the assignment
 resource "random_password" "webapp_user_password" {
-  length           = 16
-  special          = true
-  upper            = true
-  lower            = true
-  numeric           = true
+  length  = 16
+  special = true
+  upper   = true
+  lower   = true
+  numeric = true
 }
 
 #Create Cloud SQL User
@@ -157,20 +214,21 @@ resource "google_sql_user" "webapp_user" {
 }
 
 #data "google_dns_managed_zone" "cloud_dns_zone" {
- #name        = "rushikesh-deore-namecheap"
-  #dns_name    = var.dns_name
-  #description = "DNS zone for tld mapping .me"
-  # project     = var.project_id
+#name        = "rushikesh-deore-namecheap"
+#dns_name    = var.dns_name
+#description = "DNS zone for tld mapping .me"
+# project     = var.project_id
 #}
 
 resource "google_dns_record_set" "record_a" {
-  name    = var.dns_name
-  type    = "A"
-  ttl     = 300
+  name = var.dns_name
+  type = "A"
+  ttl  = 300
   #managed_zone = google_dns_managed_zone.cloud_dns_zone.name
-  managed_zone="rushikesh-deore-namecheap"
+  managed_zone = "rushikesh-deore-namecheap"
   rrdatas = [
-    google_compute_instance.webapp_instance.network_interface[0].access_config[0].nat_ip
+    google_compute_region_instance_template.webapp_instance_template.network_interface[0].access_config[0].nat_ip
+    #changes here
   ]
 }
 resource "google_service_account" "log_account" {
@@ -196,9 +254,9 @@ resource "google_project_iam_binding" "writer_metric_monitor" {
   ]
 }
 resource "google_pubsub_topic_iam_binding" "publisher" {
-  topic =google_pubsub_topic.verify_email.id
+  topic = google_pubsub_topic.verify_email.id
   # project = var.project_id
-  role   = "roles/pubsub.publisher"
+  role = "roles/pubsub.publisher"
 
   members = [
     # "serviceAccount:${google_service_account.gcf_sa.email}",
@@ -230,10 +288,10 @@ resource "google_storage_bucket_object" "code" {
 }
 
 resource "google_vpc_access_connector" "gcf_connector" {
-name= var.gcf_connector_name
-region= var.region
-network=google_compute_network.mainvpc.self_link
-ip_cidr_range = var.gcf_connector_ip_cidr_range
+  name          = var.gcf_connector_name
+  region        = var.region
+  network       = google_compute_network.mainvpc.self_link
+  ip_cidr_range = var.gcf_connector_ip_cidr_range
 }
 
 resource "google_cloudfunctions2_function" "verify_email" {
@@ -258,15 +316,15 @@ resource "google_cloudfunctions2_function" "verify_email" {
     min_instance_count = 1
     available_memory   = "256M"
     timeout_seconds    = 60
-    vpc_connector=google_vpc_access_connector.gcf_connector.self_link
+    vpc_connector      = google_vpc_access_connector.gcf_connector.self_link
     environment_variables = {
-      DB_HOST=google_sql_database_instance.cloudsql_instance.private_ip_address
-      DB_NAME=google_sql_database.webapp_database.name
-      DB_DIALECT=var.cloudsql_database_dialect
-      DB_USER=google_sql_user.webapp_user.name
-      DB_PASSWORD=random_password.webapp_user_password.result
-      MAILGUN_API_KEY=var.mailgun_api_key
-      MAILGUN_DOMAIN=var.mailgun_domain
+      DB_HOST         = google_sql_database_instance.cloudsql_instance.private_ip_address
+      DB_NAME         = google_sql_database.webapp_database.name
+      DB_DIALECT      = var.cloudsql_database_dialect
+      DB_USER         = google_sql_user.webapp_user.name
+      DB_PASSWORD     = random_password.webapp_user_password.result
+      MAILGUN_API_KEY = var.mailgun_api_key
+      MAILGUN_DOMAIN  = var.mailgun_domain
     }
     ingress_settings               = "ALLOW_INTERNAL_ONLY"
     all_traffic_on_latest_revision = true
@@ -278,8 +336,9 @@ resource "google_cloudfunctions2_function" "verify_email" {
     pubsub_topic   = google_pubsub_topic.verify_email.id
     retry_policy   = "RETRY_POLICY_RETRY"
   }
-  depends_on = [ google_storage_bucket_object.code, google_vpc_access_connector.gcf_connector, google_pubsub_topic.verify_email ]
+  depends_on = [google_storage_bucket_object.code, google_vpc_access_connector.gcf_connector, google_pubsub_topic.verify_email]
 }
+#changes here
 resource "google_pubsub_topic" "verify_email" {
   name                       = "verify_email"
   message_retention_duration = "604800s"
@@ -288,4 +347,68 @@ resource "google_pubsub_topic" "verify_email" {
 resource "google_service_account" "gcf_sa" {
   account_id   = "gcf-sa"
   display_name = "GCF Service Account"
+}
+
+resource "google_compute_region_health_check" "https_health_check" {
+  name        = "https-health-check"
+  description = "Health check via https"
+
+  timeout_sec         = 5
+  check_interval_sec  = 5
+  healthy_threshold   = 2
+  unhealthy_threshold = 10
+  region              = var.region
+  https_health_check {
+    port = var.application_port
+    # port_specification = "USE_NAMED_PORT"
+    # host               = google_compute_instance_template.webapp_instance_template.network_interface[0].network_ip
+    request_path = "/heallthz"
+    # proxy_header       = "NONE"
+    # response           = "I AM RUNNING HEALTHY"
+  }
+}
+
+resource "google_compute_region_autoscaler" "webapp_autoscaler" {
+  name   = "webapp-autoscaler"
+  region = var.region
+  #target            = google_compute_region_instance_group_manager.webapp_instance_group_manager.id
+  target = google_compute_region_instance_group_manager.webapp_instance_group_manager.self_link
+
+  autoscaling_policy {
+    min_replicas = 1
+    max_replicas = 5
+    cpu_utilization {
+      target = 0.05
+    }
+  }
+  depends_on = [google_compute_region_instance_group_manager.webapp_instance_group_manager]
+}
+resource "google_compute_region_instance_group_manager" "webapp_instance_group_manager" {
+  name               = "webapp-instance-group-manager"
+  base_instance_name = "webapp-instance"
+  target_size        = 2
+  region             = var.region
+  distribution_policy_zones = [var.zone]
+  version {
+    instance_template = google_compute_region_instance_template.webapp_instance_template.self_link
+  }
+
+  auto_healing_policies {
+    health_check      = google_compute_region_health_check.https_health_check.id
+    initial_delay_sec = 300
+  }
+
+  named_port {
+    name = "http"
+    port = 3000
+  }
+  depends_on = [google_compute_region_instance_template.webapp_instance_template]
+  # target_pools = [google_compute_target_pool.webapp_target_pool.self_link]
+  # target_tags  = ["webapp"]
+}
+
+resource "google_compute_target_pool" "webapp_target_pool" {
+  name          = "webapp-target-pool"
+  region        = var.region
+  health_checks = [google_compute_region_health_check.https_health_check.id]
 }
