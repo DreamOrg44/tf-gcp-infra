@@ -170,3 +170,7 @@ variable "gcf_connector_ip_cidr_range" {
   description="gcf connector ip range"
   type=string
 }
+variable "ip_cidr_range_proxy" {
+  description="Proxy only ip range"
+  type=string
+}

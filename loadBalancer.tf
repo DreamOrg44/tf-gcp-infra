@@ -24,19 +24,19 @@ resource "google_compute_region_ssl_certificate" "ssl_certificate" {
 resource "google_compute_region_backend_service" "backend_service" {
   name                    = "backend-service"
   region                = var.region
-  protocol                = "HTTPS"
+  protocol                = "HTTP"
   load_balancing_scheme = "EXTERNAL_MANAGED"
   timeout_sec             = 300
   port_name               = "http"
-  enable_cdn              = false
+  # enable_cdn              = false
   session_affinity      = "NONE"
   # security_policy         = var.security_policy
   # ssl_policy              = var.ssl_policy
   health_checks = [google_compute_region_health_check.https_health_check.id]
   backend {
-    group                = "google_compute_region_instance_group_manager.webapp_instance_group_manager"
+    group                = google_compute_region_instance_group_manager.webapp_instance_group_manager.instance_group
     balancing_mode       = "UTILIZATION"
-    max_rate_per_instance = 1.0
+    capacity_scaler = 1.0
   }
   # service_account_email          = google_service_account.gcf_sa.email
 
@@ -76,15 +76,25 @@ resource "google_compute_region_target_https_proxy" "https_proxy" {
 resource "google_compute_forwarding_rule" "forwarding_rule" {
   name                  = "forwarding-rule"
   ip_address            = google_compute_address.loadbalancer.address
-  target                = google_compute_region_target_https_proxy.https_proxy.self_link
+  target                = google_compute_region_target_https_proxy.https_proxy.id
   port_range            = "443"
-  load_balancing_scheme = "EXTERNAL"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
   region     = var.region
   ip_protocol           = "TCP"
-  network               = google_compute_network.mainvpc.id
-  depends_on = [google_compute_subnetwork.subnet_1]
+  network_tier          = "STANDARD"
+  network               = google_compute_network.mainvpc.name
+  depends_on = [google_compute_subnetwork.subnet_3]
 }
 
-# output "load_balancer_ip" {
-#   value = google_compute_global_address.lb_ip.address
+# resource "google_compute_forwarding_rule" "forward_rule" {
+#   name       = "forwarding-rule-compute"
+#   depends_on = [google_compute_subnetwork.subnet_3]
+#   region     = var.region
+#   ip_protocol           = "TCP"
+#   load_balancing_scheme = "EXTERNAL_MANAGED"
+#   port_range            = "443"
+#   target                = google_compute_region_target_https_proxy.https_proxy.id
+#   network               = google_compute_network.mainvpc.name
+#   ip_address            = google_compute_address.loadbalancer.address
+#   network_tier          = "STANDARD"
 # }
