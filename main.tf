@@ -51,16 +51,41 @@ resource "google_project_iam_member" "vm_instance_member" {
 # Create Firewall Rule
 resource "google_compute_firewall" "firewall" {
   name    = var.firewall_name
-  network = google_compute_network.mainvpc.name
+  network = google_compute_network.mainvpc.id
 
   allow {
     protocol = var.firewall_protocol
-    ports    = [var.application_port]
+    ports    = [var.application_port,22]
   }
   #changes here
-  #source_ranges = ["0.0.0.0/0"]
-  source_service_accounts = [google_service_account.instance_template_account.email] # Specify the service account email(s) you want to allow
-  # target_tags             = ["webapp"]
+  # source_ranges = [google_compute_subnetwork.subnet_3.ip_cidr_range]
+  source_ranges = ["0.0.0.0/0"]
+
+  # source_service_accounts = [google_service_account.instance_template_account.email] # Specify the service account email(s) you want to allow
+  target_tags   = ["webapp"]
+}
+
+# resource "google_compute_firewall" "no_access_ssh" {
+#   name    = "no-access-ssh"
+#   network = google_compute_network.mainvpc.id
+
+#  deny {
+#     protocol = "tcp"
+#     ports    = ["22"]
+#   }
+#  source_ranges = ["0.0.0.0/0"]
+#  }
+
+resource "google_compute_firewall" "health_check_firewall" {
+  name          = "health-check-firewall"
+  network       = google_compute_network.mainvpc.id
+  source_ranges = ["130.211.0.0/22", "35.191.0.0/16"]
+  # priority      = var.priority + 2
+  allow {
+    protocol = var.firewall_protocol
+    ports    = [var.application_port,22]
+    # ports    = ["443"]
+  }
 }
 #Never Delete
 #changes here
@@ -127,14 +152,14 @@ resource "google_compute_region_instance_template" "webapp_instance_template" {
     }
   }
 
-  # metadata = {
-  #   db_name     = google_sql_database.webapp_database.name
-  #   db_user     = google_sql_user.webapp_user.name
-  #   db_password = random_password.webapp_user_password.result
-  #   db_host     = google_sql_database_instance.cloudsql_instance.private_ip_address
-  # }
+  metadata = {
+    db_name     = google_sql_database.webapp_database.name
+    db_user     = google_sql_user.webapp_user.name
+    db_password = random_password.webapp_user_password.result
+    db_host     = google_sql_database_instance.cloudsql_instance.private_ip_address
+  }
 
-  # metadata_startup_script = file("startup-script.sh")
+  metadata_startup_script = file("startup-script.sh")
 
   service_account {
     email  = google_service_account.instance_template_account.email
@@ -146,10 +171,6 @@ resource "google_compute_region_instance_template" "webapp_instance_template" {
 
   tags = ["webapp"]
 }
-
-
-
-
 #Create Compute Address for private service connection
 resource "google_compute_global_address" "compute_address" {
   name          = "custom-compute-address"
@@ -159,8 +180,6 @@ resource "google_compute_global_address" "compute_address" {
   network       = google_compute_network.mainvpc.self_link
   #address      = "10.3.0.5"
 }
-
-
 
 #Adding to test for private service connection while terraform apply
 resource "google_service_networking_connection" "vpc_connection_private" {
@@ -227,7 +246,8 @@ resource "google_dns_record_set" "record_a" {
   #managed_zone = google_dns_managed_zone.cloud_dns_zone.name
   managed_zone = "rushikesh-deore-namecheap"
   rrdatas = [
-    google_compute_region_instance_template.webapp_instance_template.network_interface[0].access_config[0].nat_ip
+    google_compute_forwarding_rule.forwarding_rule.ip_address
+    #google_compute_region_instance_template.webapp_instance_template.network_interface[0].access_config[0].nat_ip
     #changes here
   ]
 }
@@ -358,11 +378,11 @@ resource "google_compute_region_health_check" "https_health_check" {
   healthy_threshold   = 2
   unhealthy_threshold = 10
   region              = var.region
-  https_health_check {
+  http_health_check {
     port = var.application_port
     # port_specification = "USE_NAMED_PORT"
     # host               = google_compute_instance_template.webapp_instance_template.network_interface[0].network_ip
-    request_path = "/heallthz"
+    request_path = "/healthz"
     # proxy_header       = "NONE"
     # response           = "I AM RUNNING HEALTHY"
   }
@@ -372,11 +392,12 @@ resource "google_compute_region_autoscaler" "webapp_autoscaler" {
   name   = "webapp-autoscaler"
   region = var.region
   #target            = google_compute_region_instance_group_manager.webapp_instance_group_manager.id
-  target = google_compute_region_instance_group_manager.webapp_instance_group_manager.self_link
+  target = google_compute_region_instance_group_manager.webapp_instance_group_manager.id
 
   autoscaling_policy {
     min_replicas = 1
-    max_replicas = 5
+    max_replicas = 2
+    cooldown_period = 60
     cpu_utilization {
       target = 0.05
     }
@@ -386,7 +407,7 @@ resource "google_compute_region_autoscaler" "webapp_autoscaler" {
 resource "google_compute_region_instance_group_manager" "webapp_instance_group_manager" {
   name               = "webapp-instance-group-manager"
   base_instance_name = "webapp-instance"
-  target_size        = 2
+  # target_size        = 1
   region             = var.region
   distribution_policy_zones = [var.zone]
   version {
@@ -407,8 +428,17 @@ resource "google_compute_region_instance_group_manager" "webapp_instance_group_m
   # target_tags  = ["webapp"]
 }
 
-resource "google_compute_target_pool" "webapp_target_pool" {
-  name          = "webapp-target-pool"
+# resource "google_compute_target_pool" "webapp_target_pool" {
+#   name          = "webapp-target-pool"
+#   region        = var.region
+#   health_checks = [google_compute_region_health_check.https_health_check.id]
+# }
+
+resource "google_compute_subnetwork" "subnet_3" {
+  name          = "proxy-only-subnet"
+  ip_cidr_range = var.ip_cidr_range_proxy
+  network       = google_compute_network.mainvpc.self_link
+  purpose       = "REGIONAL_MANAGED_PROXY"
   region        = var.region
-  health_checks = [google_compute_region_health_check.https_health_check.id]
-}
+  role          ="ACTIVE"
+  }
