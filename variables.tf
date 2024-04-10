@@ -174,3 +174,7 @@ variable "ip_cidr_range_proxy" {
   description="Proxy only ip range"
   type=string
 }
+variable "purpose" {
+  description="Crypto keys purpose"
+  type=string
+}
