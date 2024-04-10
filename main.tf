@@ -1,5 +1,5 @@
 provider "google" {
-  #credentials = file("<path-to-your-service-account-key.json>")
+  # credentials = file("/Users/rushikeshdeore/gCloudCLI/devProjectPackerKey/LastAssignment/csye-6225-ns-cloud-dev-1a56c2eac7b4.json")
   project = var.project_id
   region  = var.region
 }
@@ -37,16 +37,7 @@ resource "google_compute_route" "subnet_route" {
   next_hop_gateway = var.next_hop_gateway
 
 }
-resource "google_service_account" "instance_template_account" {
-  account_id   = "instance-template-account"
-  display_name = "VM Instance Template Service Account"
-}
 
-resource "google_project_iam_member" "vm_instance_member" {
-  project = var.project_id
-  role    = "roles/compute.instanceAdmin.v1"
-  member  = "serviceAccount:${google_service_account.instance_template_account.email}"
-}
 
 # Create Firewall Rule
 resource "google_compute_firewall" "firewall" {
@@ -142,6 +133,9 @@ resource "google_compute_region_instance_template" "webapp_instance_template" {
     disk_size_gb = 100
     type         = "pd-balanced"
     boot         = true
+    disk_encryption_key {
+      kms_key_self_link=google_kms_crypto_key.vm_crypto_key.id
+    }
   }
 
   network_interface {
@@ -189,6 +183,14 @@ resource "google_service_networking_connection" "vpc_connection_private" {
   reserved_peering_ranges = [google_compute_global_address.compute_address.name]
 }
 
+# resource "google_project_iam_binding" "kms_binding" {
+#   project = var.project_id
+
+#   role    = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+#   members = [
+#       "serviceAccount:service-1050850969947@gs-project-accounts.iam.gserviceaccount.com",
+#   ]
+# }
 
 #Create Google SQL Database Instance
 resource "google_sql_database_instance" "cloudsql_instance" {
@@ -197,6 +199,7 @@ resource "google_sql_database_instance" "cloudsql_instance" {
   # project          = var.project_id
   # region           = var.region
   deletion_protection = var.sql_deletion_protection
+  encryption_key_name = google_kms_crypto_key.cloudsql_crypto_key.id
   settings {
     tier              = var.sql_tier
     availability_type = var.sql_availability_type
@@ -251,28 +254,13 @@ resource "google_dns_record_set" "record_a" {
     #changes here
   ]
 }
-resource "google_service_account" "log_account" {
-  account_id   = "log-account"
-  display_name = "Logging_Account"
-}
+# resource "google_service_account" "log_account" {
+#   account_id   = "log-account"
+#   display_name = "Logging_Account"
+# }
 
-resource "google_project_iam_binding" "writer_config_monitor" {
-  project = var.project_id
-  role    = "roles/logging.admin"
 
-  members = [
-    "serviceAccount:log-account@${var.project_id}.iam.gserviceaccount.com",
-  ]
-}
 
-resource "google_project_iam_binding" "writer_metric_monitor" {
-  project = var.project_id
-  role    = "roles/monitoring.metricWriter"
-
-  members = [
-    "serviceAccount:log-account@${var.project_id}.iam.gserviceaccount.com",
-  ]
-}
 resource "google_pubsub_topic_iam_binding" "publisher" {
   topic = google_pubsub_topic.verify_email.id
   # project = var.project_id
@@ -281,7 +269,10 @@ resource "google_pubsub_topic_iam_binding" "publisher" {
   members = [
     # "serviceAccount:${google_service_account.gcf_sa.email}",
     # "serviceAccount:gcf-sa@${var.project_id}.iam.gserviceaccount.com",
-    "serviceAccount:${google_service_account.log_account.email}",
+    # "serviceAccount:${google_service_account.log_account.email}",
+      "serviceAccount:instance-template-account@${var.project_id}.iam.gserviceaccount.com",
+
+    
   ]
 }
 
@@ -291,8 +282,11 @@ resource "random_id" "bucket_prefix" {
 
 resource "google_storage_bucket" "verify_email_bucket" {
   name                        = "${random_id.bucket_prefix.hex}-verify_email_bucket" # Every bucket name must be globally unique
-  location                    = "US"
+  location                    = var.region
   uniform_bucket_level_access = true
+  encryption {
+    default_kms_key_name = google_kms_crypto_key.storage_crypto_key.id
+  }
 }
 
 data "archive_file" "source_code" {
@@ -349,6 +343,9 @@ resource "google_cloudfunctions2_function" "verify_email" {
     ingress_settings               = "ALLOW_INTERNAL_ONLY"
     all_traffic_on_latest_revision = true
     service_account_email          = google_service_account.gcf_sa.email
+    #checkHere
+      # service_account_email          = google_service_account.instance_template_account.email
+
   }
   event_trigger {
     trigger_region = "us-east1"
@@ -364,10 +361,7 @@ resource "google_pubsub_topic" "verify_email" {
   message_retention_duration = "604800s"
 }
 
-resource "google_service_account" "gcf_sa" {
-  account_id   = "gcf-sa"
-  display_name = "GCF Service Account"
-}
+
 
 resource "google_compute_region_health_check" "https_health_check" {
   name        = "https-health-check"
