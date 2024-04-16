@@ -222,7 +222,7 @@ resource "google_sql_database" "webapp_database" {
 #Generating random password as stated in the assignment
 resource "random_password" "webapp_user_password" {
   length  = 16
-  special = true
+  special = false
   upper   = true
   lower   = true
   numeric = true
@@ -259,22 +259,6 @@ resource "google_dns_record_set" "record_a" {
 #   display_name = "Logging_Account"
 # }
 
-
-
-resource "google_pubsub_topic_iam_binding" "publisher" {
-  topic = google_pubsub_topic.verify_email.id
-  # project = var.project_id
-  role = "roles/pubsub.publisher"
-
-  members = [
-    # "serviceAccount:${google_service_account.gcf_sa.email}",
-    # "serviceAccount:gcf-sa@${var.project_id}.iam.gserviceaccount.com",
-    # "serviceAccount:${google_service_account.log_account.email}",
-      "serviceAccount:instance-template-account@${var.project_id}.iam.gserviceaccount.com",
-
-    
-  ]
-}
 
 resource "random_id" "bucket_prefix" {
   byte_length = 8
@@ -436,3 +420,66 @@ resource "google_compute_subnetwork" "subnet_3" {
   region        = var.region
   role          ="ACTIVE"
   }
+
+
+
+  resource "google_secret_manager_secret" "db_password" {
+  secret_id = "db_password"
+  labels = {
+    label = "password"
+  }
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+resource "google_secret_manager_secret_version" "db_password" {
+  secret      = google_secret_manager_secret.db_password.id
+  secret_data = random_password.webapp_user_password.result
+}
+
+
+resource "google_secret_manager_secret" "db_host" {
+  secret_id = "db_host"
+  labels = {
+    label = "host"
+  }
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+resource "google_secret_manager_secret_version" "db_host" {
+  secret      = google_secret_manager_secret.db_host.id
+  secret_data = google_sql_database_instance.cloudsql_instance.private_ip_address
+  depends_on  = [google_sql_database_instance.cloudsql_instance]
+}
+
+
+resource "google_secret_manager_secret" "key_ring" {
+  secret_id = "key_ring"
+  labels = {
+    label = "key_ring"
+  }
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+resource "google_secret_manager_secret_version" "key_ring" {
+  secret      = google_secret_manager_secret.key_ring.id
+  secret_data = google_kms_key_ring.my_key_ring.name
+  depends_on  = [google_kms_key_ring.my_key_ring]
+}
