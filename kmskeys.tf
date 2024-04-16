@@ -1,26 +1,33 @@
+resource "random_id" "random_value" {
+  byte_length = 2
+}
+
 resource "google_kms_key_ring" "my_key_ring" {
-  name     = "my-key-ring-7"
+  name     = "my-key-ring-${random_id.random_value.hex}"
   location = var.region
 }
 
 resource "google_kms_crypto_key" "vm_crypto_key" {
-  name       = "vm-crypto-key-7"
-  key_ring   = google_kms_key_ring.my_key_ring.id
-  purpose    = var.purpose
-  rotation_period = "90000s"
+  name            = "vm-crypto-key"
+  key_ring        = google_kms_key_ring.my_key_ring.id
+  purpose         = var.purpose
+  rotation_period = "2600000s"
+  lifecycle {
+    prevent_destroy = false
+  }
 }
 
 resource "google_kms_crypto_key" "cloudsql_crypto_key" {
-  name       = "cloudsql-crypto-key-7"
-  key_ring   = google_kms_key_ring.my_key_ring.id
-  purpose    = var.purpose
+  name            = "cloudsql-crypto-key"
+  key_ring        = google_kms_key_ring.my_key_ring.id
+  purpose         = var.purpose
   rotation_period = "90000s"
 }
 
 resource "google_kms_crypto_key" "storage_crypto_key" {
-  name       = "storage-crypto-key-7"
-  key_ring   = google_kms_key_ring.my_key_ring.id
-  purpose    = var.purpose
+  name            = "storage-crypto-key"
+  key_ring        = google_kms_key_ring.my_key_ring.id
+  purpose         = var.purpose
   rotation_period = "90000s"
 }
 
