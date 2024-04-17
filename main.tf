@@ -483,3 +483,4 @@ resource "google_secret_manager_secret_version" "key_ring" {
   secret_data = google_kms_key_ring.my_key_ring.name
   depends_on  = [google_kms_key_ring.my_key_ring]
 }
+#completed
